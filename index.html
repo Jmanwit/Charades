@@ -134,10 +134,11 @@ const WORDS=("🐶 Dog,🐱 Cat,🐘 Elephant,🦒 Giraffe,🐒 Monkey,🦁 Lion
 "🧑‍🚒 Firefighter,🧑‍🍳 Chef,🧑‍⚕️ Doctor,👮 Police Officer,🧑‍🚀 Astronaut,🧑‍🏫 Teacher,🧑‍🎨 Painter,🧑‍🌾 Farmer,🧑‍✈️ Pilot,🧑‍🔧 Mechanic,🧙 Wizard,🦸 Superhero,🤡 Clown,🧑‍🎤 Singer,💂 Guard,🥷 Ninja,🏴‍☠️ Pirate,🧜 Mermaid,👸 Princess,🧑‍🔬 Scientist,👷 Builder,🧑‍⚖️ Judge,🕵️ Detective,🧑‍💻 Programmer,📸 Photographer,🤵 Waiter,🧛 Vampire,🧟 Zombie,🧑‍🎓 Student,🏇 Jockey,🎅 Santa,🧚 Fairy,🥋 Karate Kid,"+
 "🏃 Run,🏊 Swim,😴 Sleep,🍽️ Eat,🥤 Drink,💃 Dance,🎤 Sing,😂 Laugh,😭 Cry,🦘 Jump,🧗 Climb,⛳ Golf,🚴 Bike,🛁 Take a Bath,🪥 Brush Teeth,📖 Read,✍️ Write,🎨 Paint,🎣 Fish,🤧 Sneeze,🥱 Yawn,👏 Clap,🚶 Walk,⚽ Kick,🤸 Cartwheel,🧹 Sweep,🚿 Take a Shower,📞 Phone Call,🤳 Take a Selfie,🪁 Fly a Kite,🎹 Play Piano,🎸 Play Guitar,🤝 Shake Hands").split(",");
 const COLORS=[["Red","#E5383B"],["Orange","#FB8500"],["Yellow","#FFC300"],["Green","#2DC653"],["Blue","#1E88E5"],["Purple","#8E44AD"],["Pink","#FF5DA2"],["Brown","#8D5524"]];
-const DURS=[15,30,90,120], TGTS=[0,5,10,15,20];
+const DURS=[15,30,45,60], TGTS=[0,5,10,15,20];
 let S={players:[],dur:30,target:0,deck:[],recentCards:[]};
 try{const r=localStorage.getItem("charades");if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 const save=()=>{try{localStorage.setItem("charades",JSON.stringify(S))}catch(e){}};
+if(!DURS.includes(S.dur)){S.dur=30;save();}
 let pick=null,deck=[],card=null,actor=0,face="down",seen=false,phase="prep",end=0,tm=null;
 
 function show(id){["setup","game","win"].forEach(x=>$("#"+x).classList.toggle("hide",x!==id))}
@@ -146,7 +147,7 @@ function renderSetup(){
   if(pick&&used.includes(pick))pick=null;
   $("#sws").innerHTML=COLORS.map(([n,c])=>`<button class="sw ${pick===c?"on":""}" style="background:${c}" aria-label="${n}" data-c="${c}" ${used.includes(c)?"disabled":""}></button>`).join("");
   $("#plist").innerHTML=S.players.map((p,i)=>`<div class="pl"><span class="dot" style="background:${p.color}"></span><b>${p.name}</b><button data-r="${i}" aria-label="Remove">✕</button></div>`).join("")||"<small>No players yet</small>";
-  $("#durs").innerHTML=DURS.map(d=>`<button class="chip ${S.dur===d?"on":""}" data-d="${d}">${d}s</button>`).join("");
+  $("#durs").innerHTML=DURS.map(d=>`<button class="chip ${S.dur===d?"on":""}" data-d="${d}"><b style="display:block;font-size:26px;line-height:1">${d}</b><small>Seconds</small></button>`).join("");
   $("#tgts").innerHTML=TGTS.map(t=>`<button class="chip ${S.target===t?"on":""}" data-t="${t}">${t?t+" pts":"No limit"}</button>`).join("");
   $("#start").disabled=S.players.length<2;
 }
