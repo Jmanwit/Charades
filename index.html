@@ -77,6 +77,7 @@ small{opacity:.75}
   <div class="pill act" style="display:inline-flex;margin-bottom:6px"><span class="dot" id="adot"></span><span id="aname"></span>&nbsp;is acting</div>
   <div class="card down" id="card"></div>
   <button class="btn go" id="ready">Ready!</button>
+<button class="btn" id="newcard" style="display:none">New Card</button>
   <button class="btn stop hide" id="got">SOMEONE GOT IT!</button>
   <button class="btn hide" id="quit" style="margin-top:18px;font-size:16px">End game</button>
   <button class="btn" id="menu" style="margin-top:18px;font-size:16px">Settings</button>
@@ -89,6 +90,17 @@ small{opacity:.75}
   <button class="btn" id="back">Change players</button>
 </section>
 </main>
+
+<div class="who hide" id="confirm">
+  <div style="max-width:520px;margin:0 auto;padding-top:22vh">
+    <h1 style="text-align:center">End game?</h1>
+    <p style="text-align:center;margin:8px 0 22px">Your current game will end and you'll return to the setup screen.</p>
+    <div class="row" style="flex-wrap:nowrap">
+      <button class="btn go" id="confirmYes" aria-label="Yes">✓ Yes</button>
+      <button class="btn stop" id="confirmNo" aria-label="No">✕ No</button>
+    </div>
+  </div>
+</div>
 
 <div class="who hide" id="who">
   <h1>Who got it?</h1>
@@ -104,7 +116,7 @@ const WORDS=("🐶 Dog,🐱 Cat,🐘 Elephant,🦒 Giraffe,🐒 Monkey,🦁 Lion
 "🏃 Run,🏊 Swim,😴 Sleep,🍽️ Eat,🥤 Drink,💃 Dance,🎤 Sing,😂 Laugh,😭 Cry,🦘 Jump,🧗 Climb,⛳ Golf,🚴 Bike,🛁 Take a Bath,🪥 Brush Teeth,📖 Read,✍️ Write,🎨 Paint,🎣 Fish,🤧 Sneeze,🥱 Yawn,👏 Clap,🚶 Walk,⚽ Kick,🤸 Cartwheel,🧹 Sweep,🚿 Take a Shower,📞 Phone Call,🤳 Take a Selfie,🪁 Fly a Kite,🎹 Play Piano,🎸 Play Guitar,🤝 Shake Hands").split(",");
 const COLORS=[["Red","#E5383B"],["Orange","#FB8500"],["Yellow","#FFC300"],["Green","#2DC653"],["Blue","#1E88E5"],["Purple","#8E44AD"],["Pink","#FF5DA2"],["Brown","#8D5524"]];
 const DURS=[15,30,90,120], TGTS=[0,5,10,15,20];
-let S={players:[],dur:30,target:0};
+let S={players:[],dur:30,target:0,deck:[],recentCards:[]};
 try{const r=localStorage.getItem("charades");if(r)S=Object.assign(S,JSON.parse(r))}catch(e){}
 const save=()=>{try{localStorage.setItem("charades",JSON.stringify(S))}catch(e){}};
 let pick=null,deck=[],card=null,actor=0,face="down",seen=false,phase="prep",end=0,tm=null;
@@ -132,8 +144,28 @@ $("#add").onclick=()=>{
 };
 
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
-function draw(){if(!deck.length)deck=shuffle(WORDS.slice());return deck.pop()}
-function startGame(){S.players.forEach(p=>p.score=0);actor=0;deck=[];save();show("game");newTurn()}
+function buildDeck(){
+  // Keep using the same deck between games. Only rebuild it when all available
+  // cards have been used, which prevents repeats across playthroughs.
+  let recent=Array.isArray(S.recentCards)?S.recentCards:[];
+  if(recent.length>=WORDS.length){
+    // Start a new cycle, but keep the last 15 cards out temporarily.
+    recent=recent.slice(-15);
+    S.recentCards=recent;
+  }
+  const blocked=new Set(recent);
+  S.deck=shuffle(WORDS.filter(w=>!blocked.has(w)));
+}
+function draw(){
+  if(!Array.isArray(S.deck))S.deck=[];
+  if(!Array.isArray(S.recentCards))S.recentCards=[];
+  if(!S.deck.length)buildDeck();
+  const next=S.deck.pop();
+  S.recentCards.push(next);
+  save();
+  return next;
+}
+function startGame(){S.players.forEach(p=>p.score=0);actor=0;save();show("game");armGameHistory();newTurn()}
 function newTurn(){card=draw();face="down";seen=false;phase="prep";renderGame()}
 function renderGame(){
   const p=S.players[actor];
@@ -143,7 +175,7 @@ function renderGame(){
   if(phase==="run"){
     c.className="card down";
     const left=Math.max(0,Math.ceil((end-Date.now())/1000));
-    c.innerHTML=`<div class="timer">${left}</div><div class="bar"><i style="width:${Math.max(0,(end-Date.now())/(S.dur*10))}%"></i></div>`;
+    c.innerHTML=`<div class="timer">${left}</div><div class="bar"><i style="width:${Math.max(0,(end-Date.now())/(S.dur*10))}%></i></div>`;
   }else if(face==="up"){
     c.className="card up";c.innerHTML=`<div class="big">${em}</div><div class="word">${w}</div><div class="hint">Tap to hide</div>`;
   }else{
@@ -151,16 +183,38 @@ function renderGame(){
   }
   $("#ready").classList.toggle("hide",phase==="run");
   $("#ready").disabled=!seen;
+  $("#newcard").style.display=(phase==="prep" && seen)?"block":"none";
   $("#got").classList.toggle("hide",phase!=="run");
   $("#menu").classList.toggle("hide",phase==="run");
 }
+function drawNewCard(){if(phase!=="prep")return;card=draw();face="down";seen=false;renderGame()}
+function askEndGame(){if(phase==="run")return;$("#confirm").classList.remove("hide")}
+function endGame(){$("#confirm").classList.add("hide");show("setup");renderSetup()}
+function cancelEndGame(){$("#confirm").classList.add("hide")}
 $("#card").onclick=()=>{if(phase!=="prep")return;face=face==="down"?"up":"down";if(face==="up")seen=true;renderGame()};
 $("#ready").onclick=()=>{
   face="down";phase="run";end=Date.now()+S.dur*1000;renderGame();
   tm=setInterval(()=>{if(Date.now()>=end){clearInterval(tm);try{navigator.vibrate&&navigator.vibrate([300,100,300])}catch(e){}openWho()}else renderGame()},200);
 };
+$("#newcard").onclick=drawNewCard;
 $("#got").onclick=()=>{clearInterval(tm);openWho()};
-$("#menu").onclick=()=>{show("setup");renderSetup()};
+$("#menu").onclick=askEndGame;
+$("#back").onclick=askEndGame;
+$("#confirmYes").onclick=endGame;
+$("#confirmNo").onclick=cancelEndGame;
+
+let gameHistoryArmed=false;
+function armGameHistory(){
+  if(gameHistoryArmed)return;
+  history.pushState({charadesGame:true},"",location.href);
+  gameHistoryArmed=true;
+}
+window.addEventListener("popstate",()=>{
+  if($("#game").classList.contains("hide")){gameHistoryArmed=false;return}
+  history.pushState({charadesGame:true},"",location.href);
+  gameHistoryArmed=true;
+  askEndGame();
+});
 
 function openWho(){
   const sp=card.indexOf(" "),em=card.slice(0,sp),w=card.slice(sp+1);
@@ -186,7 +240,6 @@ function showWin(top){
 }
 $("#again").onclick=startGame;
 $("#start").onclick=startGame;
-$("#back").onclick=()=>{show("setup");renderSetup()};
 renderSetup();
 </script>
 <script>
