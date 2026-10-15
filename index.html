@@ -31,10 +31,10 @@ button{font:inherit;color:inherit;cursor:pointer}
 input{font:inherit;width:100%;border:3px solid var(--line);border-radius:14px;padding:8px 12px;background:var(--panel);color:var(--ink);margin-bottom:10px}
 .sw{width:46px;height:46px;border-radius:50%;border:4px solid var(--line);padding:0}
 .sw.on{outline:4px solid var(--ink);outline-offset:2px}
-.sw[disabled]{opacity:.2}
+.sw[disabled]{opacity:1;filter:none}
 .dot{width:30px;height:30px;border-radius:50%;border:3px solid var(--line);flex:none}
 .pl{display:flex;align-items:center;gap:10px;background:var(--panel);border:3px solid var(--line);border-radius:14px;padding:4px 8px;margin-bottom:8px}
-.pl b{flex:1}
+.pl b{flex:1}.pl{touch-action:pan-y}.pl.dragging{opacity:.55;outline:4px dashed var(--ink)}.pl.drag-over{outline:3px solid var(--go)}.pl .drag-handle{font-size:20px;opacity:.65;cursor:grab;touch-action:none}
 .pl button{border:0;background:none;font-size:26px}
 .score{display:flex;gap:6px;overflow-x:auto;padding:4px 0 10px}
 .pill{display:flex;align-items:center;gap:6px;border:3px solid var(--line);border-radius:999px;padding:2px 12px 2px 4px;background:var(--panel);font-weight:800;white-space:nowrap}
@@ -151,8 +151,62 @@ function renderSetup(){
   $("#tgts").innerHTML=TGTS.map(t=>`<button class="chip ${S.target===t?"on":""}" data-t="${t}">${t?t+" pts":"No limit"}</button>`).join("");
   $("#start").disabled=S.players.length<2;
 }
-$("#sws").onclick=e=>{const c=e.target.dataset.c;if(c){pick=c;renderSetup()}};
+$("#sws").onclick=e=>{const sw=e.target.closest("[data-c]");if(sw){pick=sw.dataset.c;renderSetup()}};
 $("#plist").onclick=e=>{const r=e.target.dataset.r;if(r!==undefined){S.players.splice(+r,1);save();renderSetup()}};
+
+// Reorder players by dragging with a mouse, or by pressing and holding on a touch screen.
+let reorderState=null, reorderTimer=null, reorderStartX=0, reorderStartY=0;
+const reorderList=$("#plist");
+function clearReorder(){
+  clearTimeout(reorderTimer); reorderTimer=null;
+  reorderList.querySelectorAll(".dragging,.drag-over").forEach(el=>el.classList.remove("dragging","drag-over"));
+  reorderState=null;
+}
+reorderList.addEventListener("pointerdown",e=>{
+  const row=e.target.closest(".pl[data-player-index]");
+  if(!row || e.target.closest("button") || e.target.closest(".drag-handle")) {
+    if(e.target.closest(".drag-handle") && row) { /* allow dragging from the handle */ }
+    else return;
+  }
+  reorderStartX=e.clientX; reorderStartY=e.clientY;
+  reorderState={row,pointerId:e.pointerId,pointerType:e.pointerType,active:false};
+  const begin=()=>{
+    if(!reorderState)return;
+    reorderState.active=true;
+    row.classList.add("dragging");
+    try{row.setPointerCapture(e.pointerId)}catch(_){}
+  };
+  if(e.pointerType==="mouse") begin();
+  else reorderTimer=setTimeout(begin,350);
+});
+reorderList.addEventListener("pointermove",e=>{
+  if(!reorderState || reorderState.pointerId!==e.pointerId)return;
+  const dx=e.clientX-reorderStartX,dy=e.clientY-reorderStartY;
+  if(!reorderState.active && Math.hypot(dx,dy)>10){clearTimeout(reorderTimer);reorderTimer=null;reorderState=null;return}
+  if(!reorderState.active)return;
+  e.preventDefault();
+  const target=document.elementFromPoint(e.clientX,e.clientY)?.closest("#plist .pl[data-player-index]");
+  reorderList.querySelectorAll(".drag-over").forEach(el=>el.classList.remove("drag-over"));
+  if(target && target!==reorderState.row){
+    target.classList.add("drag-over");
+    const r=target.getBoundingClientRect();
+    reorderList.insertBefore(reorderState.row,e.clientY<r.top+r.height/2?target:target.nextSibling);
+  }
+});
+function finishReorder(e){
+  if(!reorderState || (e && reorderState.pointerId!==e.pointerId))return;
+  clearTimeout(reorderTimer);reorderTimer=null;
+  if(reorderState.active){
+    const order=[...reorderList.querySelectorAll(".pl[data-player-index]")].map(el=>+el.dataset.playerIndex);
+    if(order.length===S.players.length) S.players=order.map(i=>S.players[i]);
+    save();
+    renderSetup();
+  }
+  clearReorder();
+}
+reorderList.addEventListener("pointerup",finishReorder);
+reorderList.addEventListener("pointercancel",finishReorder);
+
 $("#durs").onclick=e=>{const d=e.target.dataset.d;if(d){S.dur=+d;save();renderSetup()}};
 $("#tgts").onclick=e=>{const t=e.target.dataset.t;if(t!==undefined){S.target=+t;save();renderSetup()}};
 $("#add").onclick=()=>{
@@ -219,7 +273,7 @@ $("#ready").onclick=()=>{
 $("#newcard").onclick=drawNewCard;
 $("#got").onclick=()=>{clearInterval(tm);openWho()};
 $("#menu").onclick=askEndGame;
-$("#back").onclick=askEndGame;
+$("#back").onclick=()=>{clearInterval(tm);$("#who").classList.add("hide");$("#confirm").classList.add("hide");show("setup");renderSetup()};
 $("#confirmYes").onclick=endGame;
 $("#confirmNo").onclick=cancelEndGame;
 
